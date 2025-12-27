@@ -1,0 +1,20 @@
+# Core dependencies
+opencv-python==4.8.1.78
+numpy>=1.18.5,<1.24.0
+torch==2.0.1
+torchvision==0.15.2
+pytz==2023.3
+
+# YOLOv7 dependencies
+pandas>=1.1.4
+matplotlib>=3.2.2
+seaborn>=0.11.0
+scipy>=1.4.1
+pyyaml>=5.3.1
+tqdm>=4.41.0
+requests>=2.23.0
+Pillow>=7.1.2
+protobuf<4.21.3
+ipython
+psutil
+thop

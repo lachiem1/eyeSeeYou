@@ -1,0 +1,196 @@
+# ========================================
+# Sensitive Files - NEVER COMMIT THESE
+# ========================================
+
+# Environment variables (contain AWS credentials, bucket names, ARNs)
+.env
+.env.*
+!.env.example
+
+# Security documentation (reveals security practices and deployment info)
+SECURITY.md
+
+# AWS credentials
+.aws/
+aws-credentials.txt
+
+# SSH keys
+*.pem
+*.key
+id_rsa*
+
+# Secrets and API keys
+*secret*
+*SECRET*
+*password*
+*PASSWORD*
+secrets/
+
+# ========================================
+# CDK / Infrastructure
+# ========================================
+
+# CDK output and staging
+infrastructure/cdk/cdk.out/
+infrastructure/cdk/.cdk.staging/
+infrastructure/cdk/cdk.context.json
+
+# Compiled TypeScript
+infrastructure/cdk/**/*.js
+infrastructure/cdk/**/*.d.ts
+!infrastructure/cdk/jest.config.js
+
+# CDK permissions file (reveals security setup - NEVER COMMIT)
+# Exposing IAM permissions allows attackers to find exploitable permission gaps
+infrastructure/cdk/laptop-cdk-permissions.json
+infrastructure/cdk/*permissions*.json
+infrastructure/*permissions*.json
+*permissions*.json
+
+# Node modules
+infrastructure/cdk/node_modules/
+
+# Package locks (optional - some teams commit these)
+infrastructure/cdk/package-lock.json
+
+# ========================================
+# Backend
+# ========================================
+
+# Python
+backend/python/__pycache__/
+backend/python/*.pyc
+backend/python/.pytest_cache/
+backend/python/venv/
+backend/python/env/
+
+# YOLOv7 weights (large binary files - download separately)
+backend/python/yolov7*.pt
+backend/python/*.weights
+backend/python/*.pt
+
+# Go binaries
+backend/go/backend
+backend/go/*.exe
+backend/go/main
+
+# Go modules cache
+backend/go/vendor/
+
+# Video files (temporary local storage)
+backend/videos/
+/tmp/videos/
+*.mp4
+*.avi
+*.mov
+
+# Docker
+backend/.env
+backend/docker-compose.override.yml
+
+# ========================================
+# Frontend (when created)
+# ========================================
+
+# Dependencies
+frontend/node_modules/
+
+# Production builds
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/dist/
+
+# Environment variables
+frontend/.env
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+
+# Next.js cache
+frontend/.next/
+frontend/.swc/
+
+# ========================================
+# Logs and Debugging
+# ========================================
+
+# Log files
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+logs/
+*.log.*
+
+# Debug files
+*.dmp
+
+# ========================================
+# OS Files
+# ========================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+
+# ========================================
+# IDEs and Editors
+# ========================================
+
+# VSCode
+.vscode/
+*.code-workspace
+
+# JetBrains IDEs
+.idea/
+*.iml
+*.iws
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# ========================================
+# Temporary Files
+# ========================================
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+tmp/
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# ========================================
+# Miscellaneous
+# ========================================
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# CDK asset staging
+.cdk.staging/
+cdk.out/

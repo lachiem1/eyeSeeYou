@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: eyeseeyou-backend
+    restart: unless-stopped
+
+    # No ports needed - backend only makes outbound connections to AWS
+
+    volumes:
+      # Shared volume for video files
+      - /tmp/videos:/tmp/videos
+      # AWS credentials for development (read-only)
+      - ~/.aws:/root/.aws:ro
+
+    devices:
+      # USB webcam passthrough
+      - /dev/video0:/dev/video0
+
+    environment:
+      # AWS Configuration
+      - AWS_REGION=ap-southeast-2
+      - S3_BUCKET=${S3_BUCKET:-eyeseeyou-videos}
+      - SNS_TOPIC_ARN=${SNS_TOPIC_ARN}
+      - VIDEO_DIR=/tmp/videos
+      - CLOUDFRONT_DOMAIN=${CLOUDFRONT_DOMAIN}
+
+    # Required for USB camera access
+    privileged: true
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
