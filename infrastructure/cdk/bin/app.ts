@@ -1,10 +1,14 @@
 #!/usr/bin/env node
 import 'source-map-support/register';
 import * as cdk from 'aws-cdk-lib';
+import * as dotenv from 'dotenv';
 import { StorageStack } from '../lib/storage-stack';
 import { MessagingStack } from '../lib/messaging-stack';
 import { AuthStack } from '../lib/auth-stack';
 import { IamStack } from '../lib/iam-stack';
+
+// Load environment variables from .env file
+dotenv.config();
 
 const app = new cdk.App();
 

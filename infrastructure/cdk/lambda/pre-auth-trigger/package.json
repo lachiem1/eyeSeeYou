@@ -1,0 +1,9 @@
+{
+  "name": "eyeseeyou-pre-auth-trigger",
+  "version": "1.0.0",
+  "description": "Pre-authentication Lambda trigger for EyeSeeYou",
+  "main": "index.js",
+  "dependencies": {
+    "@aws-sdk/client-ssm": "^3.600.0"
+  }
+}

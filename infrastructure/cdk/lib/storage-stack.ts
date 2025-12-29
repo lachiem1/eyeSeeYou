@@ -2,6 +2,7 @@ import * as cdk from 'aws-cdk-lib';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
+import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import { Construct } from 'constructs';
 
 export class StorageStack extends cdk.Stack {
@@ -53,6 +54,13 @@ export class StorageStack extends cdk.Stack {
     // Grant CloudFront OAI read access to videos bucket
     this.videosBucket.grantRead(videosOriginAccessIdentity);
 
+    // Import the existing key group for signed URLs
+    const keyGroup = cloudfront.KeyGroup.fromKeyGroupId(
+      this,
+      'VideosKeyGroup',
+      '2ab12976-4f29-4726-ba41-193138b2af9f'
+    );
+
     this.videosDistribution = new cloudfront.Distribution(this, 'VideosDistribution', {
       defaultBehavior: {
         origin: origins.S3BucketOrigin.withOriginAccessIdentity(this.videosBucket, {
@@ -63,6 +71,7 @@ export class StorageStack extends cdk.Stack {
         cachedMethods: cloudfront.CachedMethods.CACHE_GET_HEAD,
         compress: true,
         cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
+        trustedKeyGroups: [keyGroup], // Require signed URLs
       },
       priceClass: cloudfront.PriceClass.PRICE_CLASS_100, // US, Canada, Europe only (cost optimization)
       comment: 'EyeSeeYou Videos CDN',
@@ -94,6 +103,32 @@ export class StorageStack extends cdk.Stack {
 
     this.frontendBucket.grantRead(frontendOriginAccessIdentity);
 
+    // Custom cache policy for SPA - no caching for HTML to support OAuth callbacks
+    const spaCachePolicy = new cloudfront.CachePolicy(this, 'SPACachePolicy', {
+      cachePolicyName: 'EyeSeeYou-SPA-Cache-Policy',
+      comment: 'Cache policy for SPA with OAuth - minimal HTML caching',
+      defaultTtl: cdk.Duration.seconds(0), // No caching by default
+      minTtl: cdk.Duration.seconds(0),
+      maxTtl: cdk.Duration.days(1),
+      headerBehavior: cloudfront.CacheHeaderBehavior.none(),
+      queryStringBehavior: cloudfront.CacheQueryStringBehavior.all(), // Pass all query params (important for OAuth code)
+      cookieBehavior: cloudfront.CacheCookieBehavior.none(),
+      enableAcceptEncodingGzip: true,
+      enableAcceptEncodingBrotli: true,
+    });
+
+    // Import the ACM certificate for custom domain (from environment variable)
+    const certificateArn = process.env.CDK_ACM_CERT_ARN;
+    if (!certificateArn) {
+      throw new Error('CDK_ACM_CERT_ARN environment variable must be set');
+    }
+
+    const certificate = acm.Certificate.fromCertificateArn(
+      this,
+      'FrontendCertificate',
+      certificateArn
+    );
+
     this.frontendDistribution = new cloudfront.Distribution(this, 'FrontendDistribution', {
       defaultBehavior: {
         origin: origins.S3BucketOrigin.withOriginAccessIdentity(this.frontendBucket, {
@@ -103,8 +138,10 @@ export class StorageStack extends cdk.Stack {
         allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD,
         cachedMethods: cloudfront.CachedMethods.CACHE_GET_HEAD,
         compress: true,
-        cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
+        cachePolicy: spaCachePolicy,
       },
+      domainNames: ['eyeseeyou.mcleod-studios-s3-service.com'],
+      certificate: certificate,
       defaultRootObject: 'index.html',
       priceClass: cloudfront.PriceClass.PRICE_CLASS_100,
       comment: 'EyeSeeYou Frontend CDN',

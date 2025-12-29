@@ -2,6 +2,7 @@ import * as cdk from 'aws-cdk-lib';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as iam from 'aws-cdk-lib/aws-iam';
+import * as ssm from 'aws-cdk-lib/aws-ssm';
 import { Construct } from 'constructs';
 import * as path from 'path';
 
@@ -14,7 +15,17 @@ export class AuthStack extends cdk.Stack {
     super(scope, id, props);
 
     // ========================================
-    // Pre-Authentication Lambda Trigger
+    // SSM Parameter: Whitelisted Google Emails
+    // ========================================
+    const allowedEmailsParam = new ssm.StringParameter(this, 'AllowedGoogleEmails', {
+      parameterName: '/eyeseeyou/allowed-google-emails',
+      stringValue: 'your-email@gmail.com,family-member@gmail.com,another-email@gmail.com', // TODO: Replace with actual emails
+      description: 'Comma-separated list of allowed Google emails for EyeSeeYou',
+      tier: ssm.ParameterTier.STANDARD, // Free tier
+    });
+
+    // ========================================
+    // Pre-SignUp Lambda Trigger (Email Whitelist)
     // ========================================
     const preAuthTrigger = new lambda.Function(this, 'PreAuthTrigger', {
       runtime: lambda.Runtime.NODEJS_20_X,
@@ -24,10 +35,12 @@ export class AuthStack extends cdk.Stack {
       description: 'Email whitelist enforcement for EyeSeeYou',
       timeout: cdk.Duration.seconds(10),
       environment: {
-        // TODO: Replace with your whitelisted emails
-        WHITELISTED_EMAILS: 'your-email@gmail.com,family-member@gmail.com',
+        WHITELISTED_EMAILS_PARAM: allowedEmailsParam.parameterName,
       },
     });
+
+    // Grant Lambda permission to read SSM parameter
+    allowedEmailsParam.grantRead(preAuthTrigger);
 
     // ========================================
     // Cognito User Pool
@@ -65,7 +78,7 @@ export class AuthStack extends cdk.Stack {
       accountRecovery: cognito.AccountRecovery.EMAIL_ONLY,
       removalPolicy: cdk.RemovalPolicy.RETAIN, // Keep user data
       lambdaTriggers: {
-        preAuthentication: preAuthTrigger,
+        preSignUp: preAuthTrigger,
       },
     });
 
@@ -100,21 +113,17 @@ export class AuthStack extends cdk.Stack {
           cognito.OAuthScope.PROFILE,
         ],
         callbackUrls: [
-          'http://localhost:3000/callback',
-          'http://localhost:3000/',
-          // TODO: Add your CloudFront URL after deployment
-          // 'https://d1234567890.cloudfront.net/callback',
+          'http://localhost:3000/callback-handler.html',
+          'https://eyeseeyou.mcleod-studios-s3-service.com/callback-handler.html',
         ],
         logoutUrls: [
           'http://localhost:3000/',
-          // TODO: Add your CloudFront URL after deployment
-          // 'https://d1234567890.cloudfront.net/',
+          'https://eyeseeyou.mcleod-studios-s3-service.com/',
         ],
       },
       supportedIdentityProviders: [
         cognito.UserPoolClientIdentityProvider.COGNITO,
-        // TODO: Add Google after configuring Google OAuth app
-        // cognito.UserPoolClientIdentityProvider.GOOGLE,
+        cognito.UserPoolClientIdentityProvider.GOOGLE,
       ],
       generateSecret: false, // Required for browser-based apps
     });
@@ -131,24 +140,26 @@ export class AuthStack extends cdk.Stack {
     // ========================================
     // Google Identity Provider
     // ========================================
-    // NOTE: You need to create a Google OAuth app first and get client ID/secret
-    // Then create this provider manually or use environment variables
+    // Get Google OAuth credentials from environment variables
+    const googleClientId = process.env.GOOGLE_CLIENT_ID;
+    const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
 
-    // Example (uncomment and fill in after getting Google credentials):
-    /*
-    new cognito.UserPoolIdentityProviderGoogle(this, 'GoogleProvider', {
-      userPool: this.userPool,
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-      scopes: ['email', 'openid', 'profile'],
-      attributeMapping: {
-        email: cognito.ProviderAttribute.GOOGLE_EMAIL,
-        givenName: cognito.ProviderAttribute.GOOGLE_GIVEN_NAME,
-        familyName: cognito.ProviderAttribute.GOOGLE_FAMILY_NAME,
-        profilePicture: cognito.ProviderAttribute.GOOGLE_PICTURE,
-      },
-    });
-    */
+    if (googleClientId && googleClientSecret) {
+      new cognito.UserPoolIdentityProviderGoogle(this, 'GoogleProvider', {
+        userPool: this.userPool,
+        clientId: googleClientId,
+        clientSecretValue: cdk.SecretValue.unsafePlainText(googleClientSecret),
+        scopes: ['email', 'openid', 'profile'],
+        attributeMapping: {
+          email: cognito.ProviderAttribute.GOOGLE_EMAIL,
+          givenName: cognito.ProviderAttribute.GOOGLE_GIVEN_NAME,
+          familyName: cognito.ProviderAttribute.GOOGLE_FAMILY_NAME,
+          profilePicture: cognito.ProviderAttribute.GOOGLE_PICTURE,
+        },
+      });
+    } else {
+      console.warn('Google OAuth credentials not provided. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables.');
+    }
 
     // ========================================
     // Cognito Identity Pool (for SQS access)
@@ -196,6 +207,21 @@ export class AuthStack extends cdk.Stack {
       })
     );
 
+    // Grant S3 read access to authenticated users
+    authenticatedRole.addToPolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: [
+          's3:GetObject',
+          's3:ListBucket',
+        ],
+        resources: [
+          `arn:aws:s3:::eyeseeyou-videos-${this.account}`,
+          `arn:aws:s3:::eyeseeyou-videos-${this.account}/*`,
+        ],
+      })
+    );
+
     // Attach role to identity pool
     new cognito.CfnIdentityPoolRoleAttachment(this, 'IdentityPoolRoleAttachment', {
       identityPoolId: this.identityPool.ref,
@@ -235,6 +261,18 @@ export class AuthStack extends cdk.Stack {
       value: `https://${userPoolDomain.domainName}.auth.${this.region}.amazoncognito.com`,
       description: 'Cognito OAuth URL',
       exportName: 'EyeSeeYouOAuthURL',
+    });
+
+    new cdk.CfnOutput(this, 'AllowedEmailsParameterName', {
+      value: allowedEmailsParam.parameterName,
+      description: 'SSM Parameter storing allowed Google emails',
+      exportName: 'EyeSeeYouAllowedEmailsParameter',
+    });
+
+    new cdk.CfnOutput(this, 'PreAuthLambdaFunctionName', {
+      value: preAuthTrigger.functionName,
+      description: 'Pre-authentication Lambda function name',
+      exportName: 'EyeSeeYouPreAuthLambda',
     });
   }
 }
