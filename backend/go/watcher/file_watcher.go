@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-	awspackage "github.com/yourusername/eyeseeyou-backend/aws"
-	"github.com/yourusername/eyeseeyou-backend/config"
+	awspackage "github.com/lachiem1/eyeSeeYou/backend/go/aws"
+	"github.com/lachiem1/eyeSeeYou/backend/go/config"
 )
 
 // FileWatcher watches a directory for new video files

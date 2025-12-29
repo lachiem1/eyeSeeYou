@@ -12,6 +12,7 @@ import subprocess
 from datetime import datetime
 import time
 import pytz
+import shutil
 
 # Configuration
 VIDEO_DIR = os.getenv('VIDEO_DIR', '/tmp/videos')
@@ -23,8 +24,9 @@ RECORDING_DURATION_SEC = 5  # Record 5 seconds
 TARGET_DURATION_SEC = 3  # Speed up to 3 seconds
 CONFIDENCE_THRESHOLD = 0.45
 PERSON_CLASS_ID = 0  # COCO dataset class ID for 'person'
-COOLDOWN_PERIOD_SEC = 30  # Wait 30 seconds between detections
+COOLDOWN_PERIOD_SEC = 10  # Wait 10 seconds between detections
 PROCESS_EVERY_N_FRAMES = 5  # Only run detection every 5th frame for performance
+MIN_FREE_DISK_SPACE_MB = 500  # Minimum free disk space in MB before recording
 
 class HumanDetector:
     def __init__(self, model_path='yolov7-tiny.pt'):
@@ -72,6 +74,26 @@ class HumanDetector:
                 return True
 
         return False
+
+    def check_disk_space(self):
+        """
+        Check if there is enough free disk space to record a video.
+        Returns True if sufficient space is available, False otherwise.
+        """
+        try:
+            stat = shutil.disk_usage(VIDEO_DIR)
+            free_mb = stat.free / (1024 * 1024)
+
+            if free_mb < MIN_FREE_DISK_SPACE_MB:
+                print(f"WARNING: Insufficient disk space: {free_mb:.1f} MB free (minimum: {MIN_FREE_DISK_SPACE_MB} MB)")
+                print(f"Skipping recording until disk space is available")
+                return False
+
+            return True
+        except Exception as e:
+            print(f"WARNING: Failed to check disk space: {e}")
+            # If we can't check, assume it's OK (fail open)
+            return True
 
     def record_video(self, cap):
         """
@@ -180,20 +202,47 @@ class HumanDetector:
         print(f"Video ready: {output_filename}")
         return output_filename
 
+    def init_camera_with_retry(self, max_retries=10):
+        """
+        Initialize camera with retry logic.
+        Retries with exponential backoff: 2s -> 4s -> 8s -> 16s -> 30s (capped at 30s)
+        Returns camera object if successful, None if all retries exhausted.
+        """
+        retry_delays = [2, 4, 8, 16, 30, 30, 30, 30, 30, 30]  # Delays for each retry
+
+        for attempt in range(max_retries):
+            print(f"Opening webcam (attempt {attempt + 1}/{max_retries})...")
+            cap = cv2.VideoCapture(CAMERA_INDEX)
+
+            if cap.isOpened():
+                # Set camera properties
+                cap.set(cv2.CAP_PROP_FRAME_WIDTH, FRAME_WIDTH)
+                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, FRAME_HEIGHT)
+                cap.set(cv2.CAP_PROP_FPS, FPS)
+
+                print(f"Webcam opened successfully: {FRAME_WIDTH}x{FRAME_HEIGHT} @ {FPS} FPS")
+                return cap
+
+            # Camera failed to open
+            if attempt < max_retries - 1:
+                delay = retry_delays[attempt]
+                print(f"WARNING: Failed to open camera at index {CAMERA_INDEX}")
+                print(f"Retrying in {delay} seconds...")
+                time.sleep(delay)
+            else:
+                print(f"ERROR: Failed to open camera after {max_retries} attempts")
+                return None
+
+        return None
+
     def run(self):
         """Main loop: capture frames, detect humans, record videos."""
-        print("Opening webcam...")
-        cap = cv2.VideoCapture(CAMERA_INDEX)
+        # Initialize camera with retry logic
+        cap = self.init_camera_with_retry()
 
-        if not cap.isOpened():
-            raise RuntimeError(f"Failed to open camera at index {CAMERA_INDEX}")
+        if cap is None:
+            raise RuntimeError(f"Failed to open camera at index {CAMERA_INDEX} after multiple retries")
 
-        # Set camera properties
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, FRAME_WIDTH)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, FRAME_HEIGHT)
-        cap.set(cv2.CAP_PROP_FPS, FPS)
-
-        print(f"Webcam opened successfully: {FRAME_WIDTH}x{FRAME_HEIGHT} @ {FPS} FPS")
         print("Starting detection loop...")
         print(f"Cooldown period: {COOLDOWN_PERIOD_SEC} seconds between detections")
 
@@ -220,6 +269,12 @@ class HumanDetector:
 
                 # Detect humans
                 if self.detect_human(frame):
+                    # Check disk space before recording
+                    if not self.check_disk_space():
+                        # Not enough disk space, skip recording but update cooldown
+                        self.last_detection_time = time.time()
+                        continue
+
                     # Human detected! Record video
                     temp_video_path = self.record_video(cap)
 

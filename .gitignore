@@ -14,6 +14,9 @@ SECURITY.md
 .aws/
 aws-credentials.txt
 
+# CloudFront signing keys (NEVER COMMIT - private keys for signed URLs)
+.cloudfront-keys/
+
 # SSH keys
 *.pem
 *.key

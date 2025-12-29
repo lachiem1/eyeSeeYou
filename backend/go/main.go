@@ -7,9 +7,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	awspackage "github.com/yourusername/eyeseeyou-backend/aws"
-	"github.com/yourusername/eyeseeyou-backend/config"
-	"github.com/yourusername/eyeseeyou-backend/watcher"
+	awspackage "github.com/lachiem1/eyeSeeYou/backend/go/aws"
+	"github.com/lachiem1/eyeSeeYou/backend/go/config"
+	"github.com/lachiem1/eyeSeeYou/backend/go/watcher"
 )
 
 func main() {
@@ -32,6 +32,13 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// Initialize CloudFront signer (fetches private key from SSM)
+	cloudFrontSigner, err := awspackage.NewCloudFrontSigner(ctx, cfg.AWSRegion)
+	if err != nil {
+		log.Fatalf("Failed to create CloudFront signer: %v", err)
+	}
+	log.Println("CloudFront signer initialized")
+
 	// Initialize S3 uploader
 	s3Uploader, err := awspackage.NewS3Uploader(ctx, cfg.AWSRegion, cfg.S3Bucket)
 	if err != nil {
@@ -39,8 +46,8 @@ func main() {
 	}
 	log.Println("S3 uploader initialized")
 
-	// Initialize SNS publisher
-	snsPublisher, err := awspackage.NewSNSPublisher(ctx, cfg.AWSRegion, cfg.SNSTopicARN)
+	// Initialize SNS publisher with CloudFront signer
+	snsPublisher, err := awspackage.NewSNSPublisher(ctx, cfg.AWSRegion, cfg.SNSTopicARN, cloudFrontSigner)
 	if err != nil {
 		log.Fatalf("Failed to create SNS publisher: %v", err)
 	}
